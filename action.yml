@@ -1,0 +1,56 @@
+name: 'Release Plugin'
+description: 'Release GOG Galaxy integration on OS'
+
+inputs:
+  assets_dir:
+    description: 'Location of directory containing build plugin artifacts (archives) for supported operating systems'
+    required: true
+    default: 'build'
+  prerelease:
+    description: 'Boolean indicating if Github release should be marked as prerelease'
+    required: false
+    default: 'false'
+  release-name:
+    description: 'Name of the GitHub release'
+    required: false
+  release-description:
+    description: 'Description for the GitHub release'
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+    - name: get version
+      id: version
+      uses: notiz-dev/github-action-json-property@release
+      with:
+        path: 'src/manifest.json'
+        prop_path: 'version'
+    - name: Prepare release
+      uses: softprops/action-gh-release@v0.1.15
+      with:
+        draft: True
+        body: ${{ inputs.release-description }}
+        prerelease: ${{ inputs.prerelease }}
+        tag_name: ${{ steps.version.outputs.prop }}
+        name:
+        files: ${{ assets_dir }}/*
+        fail_on_unmatched_files: true
+        generate_release_notes: true
+    - name: Update current_version.json
+      if: ${{ inputs.prerelease == 'false' }}
+      shell: bash
+      run: |
+        python update_current_version.py --version ${{ steps.version.outputs.prop}} --assets_dir=${{ assets_dir }} --repository=${{ github.repository }}
+    - name: Commit current_version.json
+      if: ${{ inputs.prerelease == 'false' }}
+      shell: bash 
+      # won't work for protected branches -- in such need create org. bot account and use its Personal Access Token instead
+      run: |
+        git config --global user.name github-actions
+        git config --global user.email github-actions@github.com
+        git add current_version.json
+        git commit -m "Version file update"
+        git push
+      
